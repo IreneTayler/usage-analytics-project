@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Test</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .test {
+            background: #e8f5e9;
+            padding: 20px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const SimpleTest = () => {
+            const [message, setMessage] = useState('Loading...');
+
+            useEffect(() => {
+                setMessage('React is working!');
+            }, []);
+
+            return (
+                <div className="test">
+                    <h1>Simple React Test</h1>
+                    <p>{message}</p>
+                    <button onClick={() => setMessage('Button clicked!')}>
+                        Test Button
+                    </button>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<SimpleTest />, document.getElementById('root'));
+    </script>
+</body>
+
+</html>

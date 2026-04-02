@@ -1,8 +1,7 @@
 import { PrismaClient } from '@prisma/client'
+import { API_KEY } from './config/constants'
 
 const prisma = new PrismaClient()
-
-const DEFAULT_DEV_API_KEY = process.env.USAGE_API_KEY || 'dev-usage-analytics-secret'
 
 async function seed() {
     console.log('Seeding database...')
@@ -10,17 +9,17 @@ async function seed() {
     // Create test user
     const user = await prisma.users.upsert({
         where: { email: 'test@fidant.ai' },
-        update: { api_key: DEFAULT_DEV_API_KEY },
+        update: { api_key: API_KEY },
         create: {
             email: 'test@fidant.ai',
             name: 'Test User',
             plan_tier: 'starter',
-            api_key: DEFAULT_DEV_API_KEY,
+            api_key: API_KEY,
         }
     })
 
     console.log('Created user:', user)
-    console.log('API key for Bearer auth (also set USAGE_API_KEY in env to override):', DEFAULT_DEV_API_KEY)
+    console.log('API key:', API_KEY)
 
     // Generate test data for the last 14 days
     const today = new Date()
@@ -42,7 +41,7 @@ async function seed() {
 
             // 90% of requests get committed
             const isCommitted = Math.random() > 0.1
-            const committedAt = isCommitted ? new Date(reservedAt.getTime() + Math.random() * 300000) : null // within 5 minutes
+            const committedAt = isCommitted ? new Date(reservedAt.getTime() + Math.random() * 300000) : null
 
             events.push({
                 user_id: user.id,
@@ -59,7 +58,7 @@ async function seed() {
     const now = new Date()
     const todayKey = now.toISOString().slice(0, 10)
     for (let i = 0; i < 3; i++) {
-        const recentReserved = new Date(now.getTime() - Math.random() * 10 * 60 * 1000) // within 10 minutes
+        const recentReserved = new Date(now.getTime() - Math.random() * 10 * 60 * 1000)
         events.push({
             user_id: user.id,
             date_key: todayKey,
@@ -70,11 +69,7 @@ async function seed() {
         })
     }
 
-    // Insert all events
-    await prisma.daily_usage_events.createMany({
-        data: events
-    })
-
+    await prisma.daily_usage_events.createMany({ data: events })
     console.log(`Created ${events.length} usage events`)
     console.log('Seeding completed!')
 }
