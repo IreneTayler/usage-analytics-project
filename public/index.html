@@ -7,163 +7,223 @@
     <title>Fidant.AI Usage Analytics</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link rel="stylesheet" href="/styles/main.css">
 </head>
 
 <body>
-    <div id="root"></div>
+    <div id="root">Loading...</div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
-        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = Recharts;
+        console.log('Script starting...');
+        console.log('React available:', typeof React !== 'undefined');
+        console.log('ReactDOM available:', typeof ReactDOM !== 'undefined');
 
-        // Header Component
-        const Header = ({ plan, period }) => {
-            return (
-                <div className="stats-header">
-                    <h2>Usage Analytics</h2>
-                    <div className="plan-info">
-                        <span className="plan-badge">{plan.toUpperCase()}</span>
-                        <span className="period">
-                            {new Date(period.from).toLocaleDateString()} - {new Date(period.to).toLocaleDateString()}
-                        </span>
-                    </div>
-                </div>
-            );
-        };
+        try {
+            const { useState, useEffect } = React;
 
-        // Progress Bar Component
-        const ProgressBar = ({ todayData, dailyLimit }) => {
-            const todayUsage = todayData.committed + todayData.reserved;
-            const todayProgress = (todayUsage / dailyLimit) * 100;
-
-            return (
-                <div className="today-progress">
-                    <h3>Today's Usage</h3>
-                    <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${Math.min(todayProgress, 100)}%` }} />
-                    </div>
-                    <div className="progress-text">
-                        <span>{todayUsage} / {dailyLimit} requests</span>
-                        <span className={`percentage ${todayProgress > 80 ? 'warning' : ''}`}>
-                            {Math.round(todayProgress)}%
-                        </span>
-                    </div>
-                    {todayData.reserved > 0 && (
-                        <div className="reserved-info">
-                            <small>{todayData.reserved} requests currently reserved</small>
+            // Header Component
+            const Header = ({ plan, period }) => {
+                return (
+                    <div className="stats-header">
+                        <h2>Usage Analytics</h2>
+                        <div className="plan-info">
+                            <span className="plan-badge">{plan.toUpperCase()}</span>
+                            <span className="period">
+                                {new Date(period.from).toLocaleDateString()} - {new Date(period.to).toLocaleDateString()}
+                            </span>
                         </div>
-                    )}
-                </div>
-            );
-        };
-
-        // Usage Chart Component
-        const UsageChart = ({ data }) => {
-            const chartData = data.map(day => ({
-                date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                committed: day.committed,
-                reserved: day.reserved
-            }));
-
-            return (
-                <div className="chart-container">
-                    <h3>Daily Usage Trend</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis />
-                            <Tooltip formatter={(value, name) => [value, name === 'committed' ? 'Committed' : 'Reserved']} />
-                            <Bar dataKey="committed" stackId="usage" fill="#4CAF50" />
-                            <Bar dataKey="reserved" stackId="usage" fill="#FF9800" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            );
-        };
-
-        // Summary Stats Component
-        const SummaryStats = ({ summary }) => {
-            return (
-                <div className="summary-stats">
-                    <div className="stat-card">
-                        <div className="stat-value">{summary.total_committed}</div>
-                        <div className="stat-label">Total Committed</div>
                     </div>
-                    <div className="stat-card">
-                        <div className="stat-value">{summary.avg_daily}</div>
-                        <div className="stat-label">Daily Average</div>
+                );
+            };
+
+            // Progress Bar Component
+            const ProgressBar = ({ todayData, dailyLimit }) => {
+                const todayUsage = todayData.committed + todayData.reserved;
+                const todayProgress = (todayUsage / dailyLimit) * 100;
+
+                return (
+                    <div className="today-progress">
+                        <h3>Today's Usage</h3>
+                        <div className="progress-bar">
+                            <div className="progress-fill" style={{ width: `${Math.min(todayProgress, 100)}%` }} />
+                        </div>
+                        <div className="progress-text">
+                            <span>{todayUsage} / {dailyLimit} requests</span>
+                            <span className={`percentage ${todayProgress > 80 ? 'warning' : ''}`}>
+                                {Math.round(todayProgress)}%
+                            </span>
+                        </div>
+                        {todayData.reserved > 0 && (
+                            <div className="reserved-info">
+                                <small>{todayData.reserved} requests currently reserved</small>
+                            </div>
+                        )}
                     </div>
-                    <div className="stat-card">
-                        <div className="stat-value">{summary.peak_day.count}</div>
-                        <div className="stat-label">Peak Day</div>
-                        <div className="stat-sublabel">{new Date(summary.peak_day.date).toLocaleDateString()}</div>
+                );
+            };
+
+            // Simple Chart Component (without Recharts)
+            const UsageChart = ({ data }) => {
+                const maxValue = Math.max(...data.map(day => day.committed + day.reserved));
+
+                return (
+                    <div className="chart-container">
+                        <h3>Daily Usage Trend</h3>
+                        <div style={{ display: 'flex', alignItems: 'end', height: '200px', gap: '4px', padding: '20px 0' }}>
+                            {data.map((day, index) => {
+                                const total = day.committed + day.reserved;
+                                const height = maxValue > 0 ? (total / maxValue) * 160 : 0;
+                                const committedHeight = maxValue > 0 ? (day.committed / maxValue) * 160 : 0;
+
+                                return (
+                                    <div key={index} style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        flex: 1,
+                                        minWidth: '40px'
+                                    }}>
+                                        <div style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            height: `${height}px`,
+                                            width: '100%',
+                                            maxWidth: '30px',
+                                            border: '1px solid #ddd',
+                                            borderRadius: '2px',
+                                            overflow: 'hidden'
+                                        }}>
+                                            <div style={{
+                                                backgroundColor: '#FF9800',
+                                                height: `${height - committedHeight}px`,
+                                                width: '100%'
+                                            }} title={`Reserved: ${day.reserved}`} />
+                                            <div style={{
+                                                backgroundColor: '#4CAF50',
+                                                height: `${committedHeight}px`,
+                                                width: '100%'
+                                            }} title={`Committed: ${day.committed}`} />
+                                        </div>
+                                        <small style={{
+                                            marginTop: '8px',
+                                            fontSize: '10px',
+                                            textAlign: 'center',
+                                            transform: 'rotate(-45deg)',
+                                            transformOrigin: 'center'
+                                        }}>
+                                            {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </small>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <div style={{ width: '12px', height: '12px', backgroundColor: '#4CAF50' }}></div>
+                                <small>Committed</small>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <div style={{ width: '12px', height: '12px', backgroundColor: '#FF9800' }}></div>
+                                <small>Reserved</small>
+                            </div>
+                        </div>
                     </div>
-                    <div className="stat-card">
-                        <div className="stat-value">{summary.current_streak}</div>
-                        <div className="stat-label">Current Streak</div>
-                        <div className="stat-sublabel">days active</div>
+                );
+            };
+
+            // Summary Stats Component
+            const SummaryStats = ({ summary }) => {
+                return (
+                    <div className="summary-stats">
+                        <div className="stat-card">
+                            <div className="stat-value">{summary.total_committed}</div>
+                            <div className="stat-label">Total Committed</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{summary.avg_daily}</div>
+                            <div className="stat-label">Daily Average</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{summary.peak_day.count}</div>
+                            <div className="stat-label">Peak Day</div>
+                            <div className="stat-sublabel">{new Date(summary.peak_day.date).toLocaleDateString()}</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{summary.current_streak}</div>
+                            <div className="stat-label">Current Streak</div>
+                            <div className="stat-sublabel">days active</div>
+                        </div>
                     </div>
-                </div>
-            );
-        };
+                );
+            };
 
-        // Main App Component
-        const UsageStats = ({ days = 7 }) => {
-            const [data, setData] = useState(null);
-            const [loading, setLoading] = useState(true);
-            const [error, setError] = useState(null);
+            // Main App Component
+            const UsageStats = ({ days = 7 }) => {
+                const [data, setData] = useState(null);
+                const [loading, setLoading] = useState(true);
+                const [error, setError] = useState(null);
 
-            useEffect(() => {
-                const fetchData = async () => {
-                    try {
-                        setLoading(true);
-                        setError(null);
+                useEffect(() => {
+                    const fetchData = async () => {
+                        try {
+                            setLoading(true);
+                            setError(null);
 
-                        const response = await fetch(`/api/usage/stats?days=${days}`, {
-                            headers: { Authorization: 'Bearer test-api-key-123' }
-                        });
+                            const response = await fetch(`/api/usage/stats?days=${days}`, {
+                                headers: { Authorization: 'Bearer dev-usage-analytics-secret' }
+                            });
 
-                        if (!response.ok) {
-                            const errorData = await response.json();
-                            throw new Error(errorData.error?.message || 'Failed to fetch usage stats');
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.error?.message || 'Failed to fetch usage stats');
+                            }
+
+                            const result = await response.json();
+                            console.log('API Response:', result);
+                            setData(result);
+                        } catch (err) {
+                            console.error('Fetch error:', err);
+                            setError(err instanceof Error ? err.message : 'An error occurred');
+                        } finally {
+                            setLoading(false);
                         }
+                    };
 
-                        const result = await response.json();
-                        console.log('API Response:', result); // Debug log
-                        setData(result);
-                    } catch (err) {
-                        console.error('Fetch error:', err); // Debug log
-                        setError(err instanceof Error ? err.message : 'An error occurred');
-                    } finally {
-                        setLoading(false);
-                    }
-                };
+                    fetchData();
+                }, [days]);
 
-                fetchData();
-            }, [days]);
+                if (loading) return <div className="usage-stats loading"><div className="spinner">Loading...</div></div>;
+                if (error) return <div className="usage-stats error"><div className="error-message"><h3>Error loading usage statistics</h3><p>{error}</p></div></div>;
+                if (!data) return null;
 
-            if (loading) return <div className="usage-stats loading"><div className="spinner">Loading...</div></div>;
-            if (error) return <div className="usage-stats error"><div className="error-message"><h3>Error loading usage statistics</h3><p>{error}</p></div></div>;
-            if (!data) return null;
+                const todayData = data.days[data.days.length - 1];
 
-            const todayData = data.days[data.days.length - 1];
+                return (
+                    <div className="usage-stats">
+                        <Header plan={data.plan} period={data.period} />
+                        <ProgressBar todayData={todayData} dailyLimit={data.daily_limit} />
+                        <UsageChart data={data.days} />
+                        <SummaryStats summary={data.summary} />
+                    </div>
+                );
+            };
 
-            return (
-                <div className="usage-stats">
-                    <Header plan={data.plan} period={data.period} />
-                    <ProgressBar todayData={todayData} dailyLimit={data.daily_limit} />
-                    <UsageChart data={data.days} />
-                    <SummaryStats summary={data.summary} />
+            console.log('Rendering React component...');
+            ReactDOM.render(<UsageStats days={7} />, document.getElementById('root'));
+            console.log('React component rendered successfully');
+
+        } catch (error) {
+            console.error('Error in React setup:', error);
+            document.getElementById('root').innerHTML = `
+                <div style="padding: 20px; color: red; font-family: Arial, sans-serif;">
+                    <h3>Dashboard Error</h3>
+                    <p>Failed to load the dashboard: ${error.message}</p>
+                    <p>Check the browser console for more details.</p>
                 </div>
-            );
-        };
-
-        ReactDOM.render(<UsageStats days={7} />, document.getElementById('root'));
+            `;
+        }
     </script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </body>
 
 </html>

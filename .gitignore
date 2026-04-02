@@ -19,7 +19,7 @@ yarn-error.log*
 dist/
 build/
 
-# IDE/Editor files
+# IDE files
 .vscode/
 .idea/
 *.swp
@@ -46,7 +46,15 @@ pids
 
 # Coverage directory used by tools like istanbul
 coverage/
-*.lcov
 
-# TypeScript cache
-*.tsbuildinfo
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Prisma
+prisma/dev.db*
