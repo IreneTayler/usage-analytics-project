@@ -1,23 +1,148 @@
-# Usage Analytics API
+# Fidant.AI Usage Analytics
 
-## Setup
+Система аналитики использования для AI-ассистента Fidant.AI с дневными лимитами по тарифным планам.
+
+## Функциональность
+
+- **API-эндпоинт** для получения статистики использования
+- **React-компонент** с визуализацией данных
+- **Кэширование** для оптимизации производительности
+- **Валидация** параметров и обработка ошибок
+
+## Структура проекта
+
+```
+├── prisma/
+│   ├── schema.prisma          # Схема базы данных
+│   └── migrations/            # Миграции Prisma
+├── src/
+│   ├── components/
+│   │   ├── UsageStats.tsx     # React-компонент аналитики
+│   │   └── App.tsx            # Главный компонент приложения
+│   ├── server.ts              # Express сервер с API
+│   └── seed.ts                # Скрипт для создания тестовых данных
+├── public/
+│   └── index.html             # HTML страница с встроенным React
+└── package.json
+```
+
+## API
+
+### GET /api/usage/stats
+
+Возвращает статистику использования для аутентифицированного пользователя.
+
+**Параметры:**
+- `days` (optional): количество дней для анализа (1-90, по умолчанию 7)
+
+**Пример ответа:**
+```json
+{
+  "plan": "starter",
+  "daily_limit": 30,
+  "period": {
+    "from": "2026-03-27",
+    "to": "2026-04-02"
+  },
+  "days": [
+    {
+      "date": "2026-04-02",
+      "committed": 12,
+      "reserved": 2,
+      "limit": 30,
+      "utilization": 0.4
+    }
+  ],
+  "summary": {
+    "total_committed": 87,
+    "avg_daily": 12.4,
+    "peak_day": {
+      "date": "2026-03-30",
+      "count": 28
+    },
+    "current_streak": 5
+  }
+}
+```
+
+## База данных
+
+### Таблицы
+
+**users** - пользователи системы
+- `id`: уникальный идентификатор
+- `email`: email пользователя
+- `name`: имя пользователя
+- `plan_tier`: тарифный план (starter/pro/executive)
+
+**daily_usage_events** - события использования
+- `user_id`: ID пользователя
+- `date_key`: дата в формате YYYY-MM-DD
+- `request_id`: уникальный ID запроса
+- `status`: статус (reserved/committed)
+- `reserved_at`: время резервации
+- `committed_at`: время подтверждения
+
+**daily_usage_cache** - кэш дневных агрегатов
+- `user_id`: ID пользователя
+- `date_key`: дата в формате YYYY-MM-DD
+- `committed`: количество подтвержденных запросов
+- `reserved`: количество зарезервированных запросов
+
+### Лимиты по тарифам
+
+- **starter**: 30 запросов в день
+- **pro**: 100 запросов в день
+- **executive**: 500 запросов в день
+
+## Установка и запуск
+
+1. Установите зависимости:
 ```bash
 npm install
-npx prisma generate
+```
+
+2. Настройте базу данных:
+```bash
 npx prisma migrate dev
+```
+
+3. Создайте тестовые данные:
+```bash
+npm run seed
+```
+
+4. Запустите сервер:
+```bash
 npm run dev
 ```
 
-## Features
-- Usage stats endpoint
-- Reserved expiration logic (15 min)
-- Cache layer with fallback
-- React component
+5. Откройте в браузере: http://localhost:3001
 
-## Assumptions
-- UTC timezone
-- Reserved TTL = 15 minutes
+## Особенности реализации
 
-## Improvements
-- Redis cache
-- Background jobs
+### Кэширование
+- Система использует таблицу `daily_usage_cache` для хранения предвычисленных дневных агрегатов
+- TTL кэша: 5 минут
+- При отсутствии или устаревании кэша происходит fallback на сырые данные
+
+### Обработка зарезервированных запросов
+- Зарезервированные запросы старше 15 минут исключаются из подсчета
+- Отображаются отдельно в поле `reserved`
+
+### Валидация
+- Параметр `days`: от 1 до 90
+- Корректная обработка ошибок с HTTP статусами 400, 401, 500
+
+### React-компонент
+- Использует библиотеку Recharts для визуализации
+- Показывает bar chart дневного использования
+- Отображает прогресс текущего дня
+- Включает сводную статистику: общее количество, среднее, пиковый день, streak
+
+## Технологии
+
+- **Backend**: Node.js, Express, TypeScript
+- **Database**: SQLite, Prisma ORM
+- **Frontend**: React, Recharts
+- **Styling**: CSS-in-JS (styled-jsx)

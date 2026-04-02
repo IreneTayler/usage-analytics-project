@@ -2,7 +2,8 @@
   "name": "usage-analytics",
   "version": "1.0.0",
   "scripts": {
-    "dev": "ts-node src/server.ts"
+    "dev": "ts-node src/server.ts",
+    "seed": "ts-node src/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0",

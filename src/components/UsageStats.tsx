@@ -1,0 +1,332 @@
+import React, { useState, useEffect } from 'react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+
+interface DayData {
+    date: string
+    committed: number
+    reserved: number
+    limit: number
+    utilization: number
+}
+
+interface UsageStatsData {
+    plan: string
+    daily_limit: number
+    period: {
+        from: string
+        to: string
+    }
+    days: DayData[]
+    summary: {
+        total_committed: number
+        avg_daily: number
+        peak_day: {
+            date: string
+            count: number
+        }
+        current_streak: number
+    }
+}
+
+interface UsageStatsProps {
+    days?: number
+}
+
+const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
+    const [data, setData] = useState<UsageStatsData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true)
+                setError(null)
+
+                const response = await fetch(`/api/usage/stats?days=${days}`)
+
+                if (!response.ok) {
+                    const errorData = await response.json()
+                    throw new Error(errorData.error?.message || 'Failed to fetch usage stats')
+                }
+
+                const result = await response.json()
+                setData(result)
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'An error occurred')
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchData()
+    }, [days])
+
+    if (loading) {
+        return (
+            <div className="usage-stats loading">
+                <div className="spinner">Loading...</div>
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="usage-stats error">
+                <div className="error-message">
+                    <h3>Error loading usage statistics</h3>
+                    <p>{error}</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (!data) return null
+
+    const todayData = data.days[data.days.length - 1]
+    const todayUsage = todayData.committed + todayData.reserved
+    const todayProgress = (todayUsage / data.daily_limit) * 100
+
+    // Prepare chart data
+    const chartData = data.days.map(day => ({
+        date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        committed: day.committed,
+        reserved: day.reserved,
+        total: day.committed + day.reserved,
+        limit: day.limit
+    }))
+
+    return (
+        <div className="usage-stats">
+            <div className="stats-header">
+                <h2>Usage Analytics</h2>
+                <div className="plan-info">
+                    <span className="plan-badge">{data.plan.toUpperCase()}</span>
+                    <span className="period">
+                        {new Date(data.period.from).toLocaleDateString()} - {new Date(data.period.to).toLocaleDateString()}
+                    </span>
+                </div>
+            </div>
+
+            {/* Today's Progress */}
+            <div className="today-progress">
+                <h3>Today's Usage</h3>
+                <div className="progress-bar">
+                    <div
+                        className="progress-fill"
+                        style={{ width: `${Math.min(todayProgress, 100)}%` }}
+                    />
+                </div>
+                <div className="progress-text">
+                    <span>{todayUsage} / {data.daily_limit} requests</span>
+                    <span className={`percentage ${todayProgress > 80 ? 'warning' : ''}`}>
+                        {Math.round(todayProgress)}%
+                    </span>
+                </div>
+                {todayData.reserved > 0 && (
+                    <div className="reserved-info">
+                        <small>{todayData.reserved} requests currently reserved</small>
+                    </div>
+                )}
+            </div>
+
+            {/* Chart */}
+            <div className="chart-container">
+                <h3>Daily Usage Trend</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip
+                            formatter={(value, name) => [
+                                value,
+                                name === 'committed' ? 'Committed' : name === 'reserved' ? 'Reserved' : name
+                            ]}
+                        />
+                        <Bar dataKey="committed" stackId="usage" fill="#4CAF50" />
+                        <Bar dataKey="reserved" stackId="usage" fill="#FF9800" />
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+
+            {/* Summary Stats */}
+            <div className="summary-stats">
+                <div className="stat-card">
+                    <div className="stat-value">{data.summary.total_committed}</div>
+                    <div className="stat-label">Total Committed</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-value">{data.summary.avg_daily}</div>
+                    <div className="stat-label">Daily Average</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-value">{data.summary.peak_day.count}</div>
+                    <div className="stat-label">Peak Day</div>
+                    <div className="stat-sublabel">
+                        {new Date(data.summary.peak_day.date).toLocaleDateString()}
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-value">{data.summary.current_streak}</div>
+                    <div className="stat-label">Current Streak</div>
+                    <div className="stat-sublabel">days active</div>
+                </div>
+            </div>
+
+            <style jsx>{`
+        .usage-stats {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 20px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .stats-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 30px;
+        }
+
+        .stats-header h2 {
+          margin: 0;
+          color: #333;
+        }
+
+        .plan-info {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+
+        .plan-badge {
+          background: #007bff;
+          color: white;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .period {
+          color: #666;
+          font-size: 14px;
+        }
+
+        .today-progress {
+          background: #f8f9fa;
+          padding: 20px;
+          border-radius: 8px;
+          margin-bottom: 30px;
+        }
+
+        .today-progress h3 {
+          margin: 0 0 15px 0;
+          color: #333;
+        }
+
+        .progress-bar {
+          width: 100%;
+          height: 8px;
+          background: #e9ecef;
+          border-radius: 4px;
+          overflow: hidden;
+          margin-bottom: 10px;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #4CAF50, #45a049);
+          transition: width 0.3s ease;
+        }
+
+        .progress-text {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 14px;
+        }
+
+        .percentage.warning {
+          color: #ff6b35;
+          font-weight: 600;
+        }
+
+        .reserved-info {
+          margin-top: 8px;
+          color: #666;
+        }
+
+        .chart-container {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          margin-bottom: 30px;
+        }
+
+        .chart-container h3 {
+          margin: 0 0 20px 0;
+          color: #333;
+        }
+
+        .summary-stats {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 20px;
+        }
+
+        .stat-card {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          text-align: center;
+        }
+
+        .stat-value {
+          font-size: 32px;
+          font-weight: 700;
+          color: #333;
+          margin-bottom: 8px;
+        }
+
+        .stat-label {
+          font-size: 14px;
+          color: #666;
+          font-weight: 500;
+        }
+
+        .stat-sublabel {
+          font-size: 12px;
+          color: #999;
+          margin-top: 4px;
+        }
+
+        .loading, .error {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 400px;
+        }
+
+        .spinner {
+          font-size: 18px;
+          color: #666;
+        }
+
+        .error-message {
+          text-align: center;
+          color: #dc3545;
+        }
+
+        .error-message h3 {
+          margin-bottom: 10px;
+        }
+      `}</style>
+        </div>
+    )
+}
+
+export default UsageStats

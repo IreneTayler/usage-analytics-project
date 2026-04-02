@@ -1,10 +1,17 @@
 import express from 'express'
 import { PrismaClient } from '@prisma/client'
+import path from 'path'
 
 const prisma = new PrismaClient()
 const app = express()
 
 app.use(express.json())
+app.use(express.static('public'))
+
+// Serve the main page
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'))
+})
 
 const LIMITS: Record<string, number> = {
   starter: 30,
@@ -12,11 +19,55 @@ const LIMITS: Record<string, number> = {
   executive: 500,
 }
 
+// Helper function to update cache for a specific date
+async function updateCacheForDate(userId: number, dateKey: string) {
+  const FIFTEEN_MIN = 15 * 60 * 1000
+
+  const [committed, reserved] = await Promise.all([
+    prisma.daily_usage_events.count({
+      where: {
+        user_id: userId,
+        date_key: dateKey,
+        status: 'committed'
+      }
+    }),
+    prisma.daily_usage_events.count({
+      where: {
+        user_id: userId,
+        date_key: dateKey,
+        status: 'reserved',
+        reserved_at: { gte: new Date(Date.now() - FIFTEEN_MIN) }
+      }
+    })
+  ])
+
+  await prisma.daily_usage_cache.upsert({
+    where: {
+      user_id_date_key: { user_id: userId, date_key: dateKey }
+    },
+    update: { committed, reserved },
+    create: { user_id: userId, date_key: dateKey, committed, reserved }
+  })
+
+  return { committed, reserved }
+}
+
+// Test endpoint to clear cache
+app.delete('/api/cache/clear', async (req, res) => {
+  try {
+    await prisma.daily_usage_cache.deleteMany()
+    res.json({ message: 'Cache cleared successfully' })
+  } catch (error) {
+    console.error('Error clearing cache:', error)
+    res.status(500).json({ error: 'Failed to clear cache' })
+  }
+})
+
 app.get('/api/usage/stats', async (req, res) => {
   try {
     const userId = 1 // mock auth
 
-    // Валидация параметра days
+    // Validate days parameter
     const daysParam = req.query.days as string
     const days = Math.min(Math.max(Number(daysParam) || 7, 1), 90)
 
@@ -39,7 +90,7 @@ app.get('/api/usage/stats', async (req, res) => {
       })
     }
 
-    // Генерируем даты для периода
+    // Generate date range
     const today = new Date()
     const dates: string[] = []
     const fromDate = new Date()
@@ -51,49 +102,43 @@ app.get('/api/usage/stats', async (req, res) => {
       dates.push(d.toISOString().slice(0, 10))
     }
 
-    // Получаем committed события
-    const committed = await prisma.daily_usage_events.groupBy({
-      by: ['date_key'],
+    // Try to get data from cache first
+    const cachedData = await prisma.daily_usage_cache.findMany({
       where: {
         user_id: userId,
-        status: 'committed',
         date_key: { in: dates }
-      },
-      _count: true,
+      }
     })
 
-    // Получаем актуальные reserved события (не старше 15 минут)
-    const FIFTEEN_MIN = 15 * 60 * 1000
-    const reserved = await prisma.daily_usage_events.groupBy({
-      by: ['date_key'],
-      where: {
-        user_id: userId,
-        status: 'reserved',
-        date_key: { in: dates },
-        reserved_at: { gte: new Date(Date.now() - FIFTEEN_MIN) }
-      },
-      _count: true,
-    })
-
-    // Создаем карту данных по дням
     const dataMap = new Map()
     dates.forEach(d => dataMap.set(d, { committed: 0, reserved: 0 }))
 
-    committed.forEach(c => {
-      if (dataMap.has(c.date_key)) {
-        dataMap.get(c.date_key).committed = c._count
-      }
-    })
+    // Check which dates need cache updates (missing or stale)
+    const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+    const datesToUpdate: string[] = []
 
-    reserved.forEach(r => {
-      if (dataMap.has(r.date_key)) {
-        dataMap.get(r.date_key).reserved = r._count
+    for (const date of dates) {
+      const cached = cachedData.find(c => c.date_key === date)
+      if (!cached || Date.now() - cached.updated_at.getTime() > CACHE_TTL) {
+        datesToUpdate.push(date)
+      } else {
+        dataMap.set(date, { committed: cached.committed, reserved: cached.reserved })
       }
-    })
+    }
+
+    // Update stale cache entries
+    if (datesToUpdate.length > 0) {
+      const updatePromises = datesToUpdate.map(date => updateCacheForDate(userId, date))
+      const updatedData = await Promise.all(updatePromises)
+
+      datesToUpdate.forEach((date, index) => {
+        dataMap.set(date, updatedData[index])
+      })
+    }
 
     const limit = LIMITS[user.plan_tier]
 
-    // Формируем данные по дням
+    // Build daily data
     const daysData = dates.map(date => {
       const d = dataMap.get(date)
       return {
@@ -105,17 +150,17 @@ app.get('/api/usage/stats', async (req, res) => {
       }
     })
 
-    // Вычисляем сводную статистику
+    // Calculate summary statistics
     const totalCommitted = daysData.reduce((sum, day) => sum + day.committed, 0)
     const avgDaily = totalCommitted / days
 
-    // Находим пиковый день
+    // Find peak day
     const peakDay = daysData.reduce((peak, day) =>
       day.committed > peak.count ? { date: day.date, count: day.committed } : peak,
       { date: daysData[0].date, count: daysData[0].committed }
     )
 
-    // Вычисляем текущий streak (подряд идущие дни с активностью)
+    // Calculate current streak
     let currentStreak = 0
     for (let i = daysData.length - 1; i >= 0; i--) {
       if (daysData[i].committed > 0) {
@@ -153,5 +198,5 @@ app.get('/api/usage/stats', async (req, res) => {
   }
 })
 
-const PORT = process.env.PORT || 8080
+const PORT = process.env.PORT || 3001
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`))
