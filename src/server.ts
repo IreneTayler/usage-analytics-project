@@ -91,6 +91,16 @@ async function updateCacheForDate(userId: number, dateKey: string) {
 
 app.delete('/api/cache/clear', async (req, res) => {
   try {
+    const user = await userFromRequest(req)
+    if (!user) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid or missing API key'
+        }
+      })
+    }
+
     await prisma.daily_usage_cache.deleteMany()
     res.json({ message: 'Cache cleared successfully' })
   } catch (error) {
@@ -235,5 +245,5 @@ app.get('/api/usage/stats', async (req, res) => {
   }
 })
 
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 3003
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`))
