@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+declare global {
+    interface Window {
+        USAGE_API_KEY?: string
+    }
+}
 
 interface DayData {
     date: string
@@ -26,13 +32,26 @@ interface UsageStatsData {
         }
         current_streak: number
     }
+    meta?: {
+        stale_cache_fallback: boolean
+    }
 }
 
 interface UsageStatsProps {
     days?: number
+    /** Bearer token; defaults to dev key or window.USAGE_API_KEY */
+    apiKey?: string
 }
 
-const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
+const DEFAULT_DEV_KEY = 'dev-usage-analytics-secret'
+
+function resolveApiKey(prop?: string): string {
+    if (prop) return prop
+    if (typeof window !== 'undefined' && window.USAGE_API_KEY) return window.USAGE_API_KEY
+    return DEFAULT_DEV_KEY
+}
+
+const UsageStats: React.FC<UsageStatsProps> = ({ days = 7, apiKey: apiKeyProp }) => {
     const [data, setData] = useState<UsageStatsData | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -43,7 +62,10 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
                 setLoading(true)
                 setError(null)
 
-                const response = await fetch(`/api/usage/stats?days=${days}`)
+                const token = resolveApiKey(apiKeyProp)
+                const response = await fetch(`/api/usage/stats?days=${days}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
 
                 if (!response.ok) {
                     const errorData = await response.json()
@@ -60,7 +82,7 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
         }
 
         fetchData()
-    }, [days])
+    }, [days, apiKeyProp])
 
     if (loading) {
         return (
@@ -87,30 +109,34 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
     const todayUsage = todayData.committed + todayData.reserved
     const todayProgress = (todayUsage / data.daily_limit) * 100
 
-    // Prepare chart data
     const chartData = data.days.map(day => ({
         date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         committed: day.committed,
         reserved: day.reserved,
         total: day.committed + day.reserved,
-        limit: day.limit
+        limit: day.limit,
     }))
 
     return (
         <div className="usage-stats">
+            {data.meta?.stale_cache_fallback && (
+                <div className="stale-cache-banner" role="status">
+                    Showing cached data; live refresh temporarily unavailable.
+                </div>
+            )}
             <div className="stats-header">
                 <h2>Usage Analytics</h2>
                 <div className="plan-info">
                     <span className="plan-badge">{data.plan.toUpperCase()}</span>
                     <span className="period">
-                        {new Date(data.period.from).toLocaleDateString()} - {new Date(data.period.to).toLocaleDateString()}
+                        {new Date(data.period.from).toLocaleDateString()} —{' '}
+                        {new Date(data.period.to).toLocaleDateString()}
                     </span>
                 </div>
             </div>
 
-            {/* Today's Progress */}
             <div className="today-progress">
-                <h3>Today's Usage</h3>
+                <h3>Today&apos;s Usage</h3>
                 <div className="progress-bar">
                     <div
                         className="progress-fill"
@@ -118,7 +144,9 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
                     />
                 </div>
                 <div className="progress-text">
-                    <span>{todayUsage} / {data.daily_limit} requests</span>
+                    <span>
+                        {todayUsage} / {data.daily_limit} requests
+                    </span>
                     <span className={`percentage ${todayProgress > 80 ? 'warning' : ''}`}>
                         {Math.round(todayProgress)}%
                     </span>
@@ -130,7 +158,6 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
                 )}
             </div>
 
-            {/* Chart */}
             <div className="chart-container">
                 <h3>Daily Usage Trend</h3>
                 <ResponsiveContainer width="100%" height={300}>
@@ -141,7 +168,11 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
                         <Tooltip
                             formatter={(value, name) => [
                                 value,
-                                name === 'committed' ? 'Committed' : name === 'reserved' ? 'Reserved' : name
+                                name === 'committed'
+                                    ? 'Committed'
+                                    : name === 'reserved'
+                                      ? 'Reserved'
+                                      : String(name),
                             ]}
                         />
                         <Bar dataKey="committed" stackId="usage" fill="#4CAF50" />
@@ -150,7 +181,6 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
                 </ResponsiveContainer>
             </div>
 
-            {/* Summary Stats */}
             <div className="summary-stats">
                 <div className="stat-card">
                     <div className="stat-value">{data.summary.total_committed}</div>
@@ -174,157 +204,144 @@ const UsageStats: React.FC<UsageStatsProps> = ({ days = 7 }) => {
                 </div>
             </div>
 
-            <style jsx>{`
-        .usage-stats {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 20px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        .stats-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 30px;
-        }
-
-        .stats-header h2 {
-          margin: 0;
-          color: #333;
-        }
-
-        .plan-info {
-          display: flex;
-          align-items: center;
-          gap: 15px;
-        }
-
-        .plan-badge {
-          background: #007bff;
-          color: white;
-          padding: 4px 12px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .period {
-          color: #666;
-          font-size: 14px;
-        }
-
-        .today-progress {
-          background: #f8f9fa;
-          padding: 20px;
-          border-radius: 8px;
-          margin-bottom: 30px;
-        }
-
-        .today-progress h3 {
-          margin: 0 0 15px 0;
-          color: #333;
-        }
-
-        .progress-bar {
-          width: 100%;
-          height: 8px;
-          background: #e9ecef;
-          border-radius: 4px;
-          overflow: hidden;
-          margin-bottom: 10px;
-        }
-
-        .progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #4CAF50, #45a049);
-          transition: width 0.3s ease;
-        }
-
-        .progress-text {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 14px;
-        }
-
-        .percentage.warning {
-          color: #ff6b35;
-          font-weight: 600;
-        }
-
-        .reserved-info {
-          margin-top: 8px;
-          color: #666;
-        }
-
-        .chart-container {
-          background: white;
-          padding: 20px;
-          border-radius: 8px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          margin-bottom: 30px;
-        }
-
-        .chart-container h3 {
-          margin: 0 0 20px 0;
-          color: #333;
-        }
-
-        .summary-stats {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 20px;
-        }
-
-        .stat-card {
-          background: white;
-          padding: 20px;
-          border-radius: 8px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          text-align: center;
-        }
-
-        .stat-value {
-          font-size: 32px;
-          font-weight: 700;
-          color: #333;
-          margin-bottom: 8px;
-        }
-
-        .stat-label {
-          font-size: 14px;
-          color: #666;
-          font-weight: 500;
-        }
-
-        .stat-sublabel {
-          font-size: 12px;
-          color: #999;
-          margin-top: 4px;
-        }
-
-        .loading, .error {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 400px;
-        }
-
-        .spinner {
-          font-size: 18px;
-          color: #666;
-        }
-
-        .error-message {
-          text-align: center;
-          color: #dc3545;
-        }
-
-        .error-message h3 {
-          margin-bottom: 10px;
-        }
-      `}</style>
+            <style>{`
+                .stale-cache-banner {
+                    background: #fff3cd;
+                    border: 1px solid #ffc107;
+                    color: #856404;
+                    padding: 10px 14px;
+                    border-radius: 8px;
+                    margin-bottom: 16px;
+                    font-size: 14px;
+                }
+                .usage-stats {
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                }
+                .stats-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 30px;
+                }
+                .stats-header h2 {
+                    margin: 0;
+                    color: #333;
+                }
+                .plan-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 15px;
+                }
+                .plan-badge {
+                    background: #007bff;
+                    color: white;
+                    padding: 4px 12px;
+                    border-radius: 12px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+                .period {
+                    color: #666;
+                    font-size: 14px;
+                }
+                .today-progress {
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                }
+                .today-progress h3 {
+                    margin: 0 0 15px 0;
+                    color: #333;
+                }
+                .progress-bar {
+                    width: 100%;
+                    height: 8px;
+                    background: #e9ecef;
+                    border-radius: 4px;
+                    overflow: hidden;
+                    margin-bottom: 10px;
+                }
+                .progress-fill {
+                    height: 100%;
+                    background: linear-gradient(90deg, #4caf50, #45a049);
+                    transition: width 0.3s ease;
+                }
+                .progress-text {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    font-size: 14px;
+                }
+                .percentage.warning {
+                    color: #ff6b35;
+                    font-weight: 600;
+                }
+                .reserved-info {
+                    margin-top: 8px;
+                    color: #666;
+                }
+                .chart-container {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    margin-bottom: 30px;
+                }
+                .chart-container h3 {
+                    margin: 0 0 20px 0;
+                    color: #333;
+                }
+                .summary-stats {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                }
+                .stat-card {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    text-align: center;
+                }
+                .stat-value {
+                    font-size: 32px;
+                    font-weight: 700;
+                    color: #333;
+                    margin-bottom: 8px;
+                }
+                .stat-label {
+                    font-size: 14px;
+                    color: #666;
+                    font-weight: 500;
+                }
+                .stat-sublabel {
+                    font-size: 12px;
+                    color: #999;
+                    margin-top: 4px;
+                }
+                .loading,
+                .error {
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 400px;
+                }
+                .spinner {
+                    font-size: 18px;
+                    color: #666;
+                }
+                .error-message {
+                    text-align: center;
+                    color: #dc3545;
+                }
+                .error-message h3 {
+                    margin-bottom: 10px;
+                }
+            `}</style>
         </div>
     )
 }

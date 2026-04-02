@@ -2,21 +2,25 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+const DEFAULT_DEV_API_KEY = process.env.USAGE_API_KEY || 'dev-usage-analytics-secret'
+
 async function seed() {
     console.log('Seeding database...')
 
     // Create test user
     const user = await prisma.users.upsert({
         where: { email: 'test@fidant.ai' },
-        update: {},
+        update: { api_key: DEFAULT_DEV_API_KEY },
         create: {
             email: 'test@fidant.ai',
             name: 'Test User',
-            plan_tier: 'starter'
+            plan_tier: 'starter',
+            api_key: DEFAULT_DEV_API_KEY,
         }
     })
 
     console.log('Created user:', user)
+    console.log('API key for Bearer auth (also set USAGE_API_KEY in env to override):', DEFAULT_DEV_API_KEY)
 
     // Generate test data for the last 14 days
     const today = new Date()

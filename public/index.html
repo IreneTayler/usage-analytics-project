@@ -5,10 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fidant.AI Usage Analytics</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Loaded from this app’s /assets/* (see server.ts) so the page works without CDN access -->
+    <script src="/assets/react.js"></script>
+    <script src="/assets/react-dom.js"></script>
+    <script src="/assets/react-is.js"></script>
+    <script src="/assets/recharts.js"></script>
+    <script src="/assets/babel.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -20,6 +22,16 @@
         .app {
             min-height: 100vh;
             padding: 20px 0;
+        }
+
+        .stale-cache-banner {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
         }
 
         .usage-stats {
@@ -175,11 +187,24 @@
 </head>
 
 <body>
+    <div id="boot-error"
+        style="display:none;margin:24px;padding:16px;background:#fee;border:1px solid #c00;color:#400;font-family:sans-serif;">
+    </div>
     <div id="root"></div>
+    <script>
+        window.addEventListener('error', function (e) {
+            var el = document.getElementById('boot-error');
+            if (!el || !e.message) return;
+            el.style.display = 'block';
+            el.textContent = 'Script error: ' + e.message + (e.filename ? ' (' + e.filename + ')' : '');
+        });
+    </script>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
         const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = Recharts;
+
+        const USAGE_API_KEY = window.USAGE_API_KEY || 'dev-usage-analytics-secret';
 
         const UsageStats = ({ days = 7 }) => {
             const [data, setData] = useState(null);
@@ -192,7 +217,9 @@
                         setLoading(true);
                         setError(null);
 
-                        const response = await fetch(`/api/usage/stats?days=${days}`);
+                        const response = await fetch(`/api/usage/stats?days=${days}`, {
+                            headers: { Authorization: `Bearer ${USAGE_API_KEY}` }
+                        });
 
                         if (!response.ok) {
                             const errorData = await response.json();
@@ -247,6 +274,11 @@
 
             return (
                 <div className="usage-stats">
+                    {data.meta && data.meta.stale_cache_fallback && (
+                        <div className="stale-cache-banner" role="status">
+                            Showing cached data; live refresh temporarily unavailable.
+                        </div>
+                    )}
                     <div className="stats-header">
                         <h2>Usage Analytics</h2>
                         <div className="plan-info">
@@ -257,7 +289,6 @@
                         </div>
                     </div>
 
-                    {/* Today's Progress */}
                     <div className="today-progress">
                         <h3>Today's Usage</h3>
                         <div className="progress-bar">
@@ -276,54 +307,51 @@
                             <div className="reserved-info">
                                 <small>{todayData.reserved} requests currently reserved</small>
                             </div>
-                        </div>
                         )}
-                </div>
+                    </div>
 
-                    {/* Chart */ }
-            <div className="chart-container">
-                <h3>Daily Usage Trend</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" />
-                        <YAxis />
-                        <Tooltip
-                            formatter={(value, name) => [
-                                value,
-                                name === 'committed' ? 'Committed' : name === 'reserved' ? 'Reserved' : name
-                            ]}
-                        />
-                        <Bar dataKey="committed" stackId="usage" fill="#4CAF50" />
-                        <Bar dataKey="reserved" stackId="usage" fill="#FF9800" />
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
+                    <div className="chart-container">
+                        <h3>Daily Usage Trend</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="date" />
+                                <YAxis />
+                                <Tooltip
+                                    formatter={(value, name) => [
+                                        value,
+                                        name === 'committed' ? 'Committed' : name === 'reserved' ? 'Reserved' : name
+                                    ]}
+                                />
+                                <Bar dataKey="committed" stackId="usage" fill="#4CAF50" />
+                                <Bar dataKey="reserved" stackId="usage" fill="#FF9800" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
 
-            {/* Summary Stats */ }
-            <div className="summary-stats">
-                <div className="stat-card">
-                    <div className="stat-value">{data.summary.total_committed}</div>
-                    <div className="stat-label">Total Committed</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-value">{data.summary.avg_daily}</div>
-                    <div className="stat-label">Daily Average</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-value">{data.summary.peak_day.count}</div>
-                    <div className="stat-label">Peak Day</div>
-                    <div className="stat-sublabel">
-                        {new Date(data.summary.peak_day.date).toLocaleDateString()}
+                    <div className="summary-stats">
+                        <div className="stat-card">
+                            <div className="stat-value">{data.summary.total_committed}</div>
+                            <div className="stat-label">Total Committed</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.summary.avg_daily}</div>
+                            <div className="stat-label">Daily Average</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.summary.peak_day.count}</div>
+                            <div className="stat-label">Peak Day</div>
+                            <div className="stat-sublabel">
+                                {new Date(data.summary.peak_day.date).toLocaleDateString()}
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.summary.current_streak}</div>
+                            <div className="stat-label">Current Streak</div>
+                            <div className="stat-sublabel">days active</div>
+                        </div>
                     </div>
                 </div>
-                <div className="stat-card">
-                    <div className="stat-value">{data.summary.current_streak}</div>
-                    <div className="stat-label">Current Streak</div>
-                    <div className="stat-sublabel">days active</div>
-                </div>
-            </div>
-                </div >
             );
         };
 
